@@ -74,6 +74,8 @@ class FluxKlienMaskedInpaint(object):
         self.random_noise = NODE_CLASS_MAPPINGS["RandomNoise"]()
         self.reference_latent = NODE_CLASS_MAPPINGS["ReferenceLatent"]()
         self.inpaint_condition = NODE_CLASS_MAPPINGS["InpaintModelConditioning"]()
+        self.sampler_select = NODE_CLASS_MAPPINGS["KSamplerSelect"]()
+
 
         self.cfg = NODE_CLASS_MAPPINGS["CFGGuider"]
         self.scheduler = NODE_CLASS_MAPPINGS["Flux2Scheduler"]()
@@ -227,10 +229,13 @@ class FluxKlienMaskedInpaint(object):
             height=height,
         )
 
+        sampler = self.sampler_select.EXECUTE_NORMALIZED(
+            sampler_name="euler"
+        )
         samples = self.sampler.EXECUTE_NORMALIZED(
             noise=get_value_at_index(noise, 0),
             guider=get_value_at_index(guider, 0),
-            sampler="euler",
+            sampler=get_value_at_index(sampler, 0),
             sigmas=get_value_at_index(sigmas, 0),
             latent_image=get_value_at_index(conditioning, 2),
         )
