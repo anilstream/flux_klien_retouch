@@ -22,6 +22,42 @@ import_custom_nodes()
 from nodes import NODE_CLASS_MAPPINGS
 
 
+# load klien models globally
+
+UNET = None
+CLIP = None
+VAE  = None
+
+
+def load_klien_models():
+    global UNET, CLIP, VAE
+
+    if UNET is not None:
+        return  # already loaded
+
+    print("🔄 Loading Flux models once...", flush=True)
+
+    with torch.inference_mode():
+        UNET = NODE_CLASS_MAPPINGS["UNETLoader"]().load_unet(
+            unet_name="flux-2-klein-9b-fp8.safetensors",
+            weight_dtype="fp8_e4m3fn",
+        )
+
+        CLIP = NODE_CLASS_MAPPINGS["CLIPLoader"]().load_clip(
+            clip_name="qwen_3_8b_fp8mixed.safetensors",
+            type="flux2",
+            device="default",
+        )
+
+        VAE = NODE_CLASS_MAPPINGS["VAELoader"]().load_vae(
+            vae_name="flux2-vae.safetensors"
+        )
+
+    print("✅ Models loaded and cached", flush=True)
+
+load_klien_models()
+
+
 class FluxKlienMaskedInpaint(object):
     """
     Clean ComfyUI → Python inpaint app
@@ -46,26 +82,6 @@ class FluxKlienMaskedInpaint(object):
             self.text_encode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()
             self.sampler_select = NODE_CLASS_MAPPINGS["KSamplerSelect"]()
 
-            # ------------------------------------------------
-            # Models (should be loaded once)
-            # ------------------------------------------------
-
-            self.unet = self.unet_loader.load_unet(
-                unet_name="flux-2-klein-9b-fp8.safetensors",
-                weight_dtype="fp8_e4m3fn",
-            )
-
-            self.clip = self.clip_loader.load_clip(
-                clip_name="qwen_3_8b_fp8mixed.safetensors",
-                type="flux2",
-                device="default",
-            )
-
-            self.vae = self.vae_loader.load_vae(
-                vae_name="flux2-vae.safetensors"
-            )
-
-            print("loaded all models...")
 
     def run( self,image_path: str, mask_path: str, prompt: str,):
         """
@@ -111,12 +127,12 @@ class FluxKlienMaskedInpaint(object):
             # ------------------------------------------------
             positive = self.text_encode.encode(
                 text=prompt,
-                clip=get_value_at_index(self.clip, 0),
+                clip=get_value_at_index(CLIP, 0),
             )
 
             negative = self.text_encode.encode(
                 text="",
-                clip=get_value_at_index(self.clip, 0),
+                clip=get_value_at_index(CLIP, 0),
             )
 
             # ------------------------------------------------
@@ -156,7 +172,7 @@ class FluxKlienMaskedInpaint(object):
             # ------------------------------------------------
             latent = NODE_CLASS_MAPPINGS["VAEEncode"]().encode(
                 pixels=get_value_at_index(crop, 1),
-                vae=get_value_at_index(self.vae, 0),
+                vae=get_value_at_index(VAE, 0),
             )
 
             pos_ref = reference_latent.EXECUTE_NORMALIZED(
@@ -173,7 +189,7 @@ class FluxKlienMaskedInpaint(object):
                 noise_mask=True,
                 positive=get_value_at_index(pos_ref, 0),
                 negative=get_value_at_index(neg_ref, 0),
-                vae=get_value_at_index(self.vae, 0),
+                vae=get_value_at_index(VAE, 0),
                 pixels=get_value_at_index(crop, 1),
                 mask=get_value_at_index(crop, 2),
             )
@@ -187,7 +203,7 @@ class FluxKlienMaskedInpaint(object):
 
             guider = cfg.EXECUTE_NORMALIZED(
                 cfg=1,
-                model=get_value_at_index(self.unet, 0),
+                model=get_value_at_index(UNET, 0),
                 positive=get_value_at_index(conditioning, 0),
                 negative=get_value_at_index(conditioning, 1),
             )
@@ -218,7 +234,7 @@ class FluxKlienMaskedInpaint(object):
 
             decoded = vae_decode.decode(
                 samples=get_value_at_index(samples, 0),
-                vae=get_value_at_index(self.vae, 0),
+                vae=get_value_at_index(VAE, 0),
             )
 
             final = stitch.inpaint_stitch(
@@ -258,28 +274,8 @@ class FluxKlienGenFill(object):
             self.vae_loader = NODE_CLASS_MAPPINGS["VAELoader"]
 
             self.image_composite = NODE_CLASS_MAPPINGS["ImageCompositeMasked"]
-
-            # -----------------------------
-            # Models (load once)
-            # -----------------------------
-            self.unet = self.unet_loader().load_unet(
-                unet_name="flux-2-klein-9b-fp8.safetensors",
-                weight_dtype="fp8_e4m3fn",
-            )
-
-            self.clip = self.clip_loader().load_clip(
-                clip_name="qwen_3_8b_fp8mixed.safetensors",
-                type="flux2",
-                device="default",
-            )
-
-            self.vae = self.vae_loader().load_vae(
-                vae_name="flux2-vae.safetensors"
-            )
-
             self.outpaint_prompt = "去除图像边缘的深灰色区域，并参考非灰色区域中的元素来扩展和混合图像"
 
-            print("✅ GenFill models loaded", flush=True)
 
     def run(self, image_path: str, top: int = 0, bottom: int = 0, left: int = 0, right: int = 0):
 
@@ -338,12 +334,12 @@ class FluxKlienGenFill(object):
             # -----------------------------
             positive = self.text_encode().encode(
                 text=self.outpaint_prompt,
-                clip=get_value_at_index(self.clip, 0),
+                clip=get_value_at_index(CLIP, 0),
             )
 
             negative = self.text_encode().encode(
                 text="",
-                clip=get_value_at_index(self.clip, 0),
+                clip=get_value_at_index(CLIP, 0),
             )
 
             # -----------------------------
@@ -351,7 +347,7 @@ class FluxKlienGenFill(object):
             # -----------------------------
             latent = NODE_CLASS_MAPPINGS["VAEEncode"]().encode(
                 pixels=get_value_at_index(resized, 0),
-                vae=get_value_at_index(self.vae, 0),
+                vae=get_value_at_index(VAE, 0),
             )
 
             pos_ref = reference_latent.EXECUTE_NORMALIZED(
@@ -368,7 +364,7 @@ class FluxKlienGenFill(object):
                 noise_mask=False,
                 positive=get_value_at_index(pos_ref, 0),
                 negative=get_value_at_index(neg_ref, 0),
-                vae=get_value_at_index(self.vae, 0),
+                vae=get_value_at_index(VAE, 0),
                 pixels=get_value_at_index(resized, 0),
                 mask=get_value_at_index(resized, 3),
             )
@@ -382,7 +378,7 @@ class FluxKlienGenFill(object):
 
             guider = cfg.EXECUTE_NORMALIZED(
                 cfg=1,
-                model=get_value_at_index(self.unet, 0),
+                model=get_value_at_index(UNET, 0),
                 positive=get_value_at_index(conditioning, 0),
                 negative=get_value_at_index(conditioning, 1),
             )
@@ -410,7 +406,7 @@ class FluxKlienGenFill(object):
 
             decoded = vae_decode.decode(
                 samples=get_value_at_index(samples, 0),
-                vae=get_value_at_index(self.vae, 0),
+                vae=get_value_at_index(VAE, 0),
             )
 
             # -----------------------------
