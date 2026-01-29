@@ -327,6 +327,7 @@ class FluxKlienGenFill(object):
                 device="cpu",
                 image=get_value_at_index(padded, 0),
                 mask=get_value_at_index(padded, 1),
+                unique_id=random.randint(0, 2 ** 63 - 1)
             )
 
             # -----------------------------
