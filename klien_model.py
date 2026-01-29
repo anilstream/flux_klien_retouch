@@ -1,9 +1,5 @@
 # Standard library
 import os
-import sys
-
-# Inject ComfyUI CPU flag before any ComfyUI imports
-sys.argv.append("--cpu")
 
 # Third-party
 import torch
@@ -18,34 +14,6 @@ from klien_utils import (
 )
 
 from PIL import Image
-
-# ---- ComfyUI bootstrap ----
-add_comfyui_directory_to_sys_path()
-add_extra_model_paths()
-import_custom_nodes()
-
-from nodes import NODE_CLASS_MAPPINGS
-
-
-# Standard library
-import os
-import sys
-
-# Force CPU mode (same as your working app)
-sys.argv.append("--cpu")
-
-# Third-party
-import torch
-from PIL import Image
-
-# Local utils (same ones you already use)
-from klien_utils import (
-    add_comfyui_directory_to_sys_path,
-    add_extra_model_paths,
-    import_custom_nodes,
-    get_value_at_index,
-    output_to_bytes,
-)
 
 # ---- ComfyUI bootstrap ----
 add_comfyui_directory_to_sys_path()
