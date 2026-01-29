@@ -29,14 +29,13 @@ RUN pip3 install fastapi[standard]
 RUN pip install huggingface_hub
 RUN hf auth login --token $HF_TOKEN
 
-WORKDIR /app/ComfyUI/custom_nodes
-RUN git clone https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch
-
-
 # download models
 RUN wget https://huggingface.co/Comfy-Org/flux2-klein-9B/resolve/main/split_files/text_encoders/qwen_3_8b_fp8mixed.safetensors -O ComfyUI/models/text_encoders/qwen_3_8b_fp8mixed.safetensors
 RUN wget https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors -O ComfyUI/models/vae/flux2-vae.safetensors
 RUN hf download black-forest-labs/FLUX.2-klein-9b-fp8 flux-2-klein-9b-fp8.safetensors --local-dir ComfyUI/models/diffusion_models
+
+WORKDIR /app/ComfyUI/custom_nodes
+RUN git clone https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch
 
 # copy source files
 WORKDIR /app
