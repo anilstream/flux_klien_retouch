@@ -83,6 +83,24 @@ class FluxKlienMaskedInpaint(object):
         self.get_size = NODE_CLASS_MAPPINGS["GetImageSize"]()
         self.stitch = NODE_CLASS_MAPPINGS["InpaintStitchImproved"]()
 
+        # ------------------------------------------------
+        # Models
+        # ------------------------------------------------
+        self.unet = self.unet_loader.load_unet(
+            unet_name="flux-2-klein-9b-fp8.safetensors",
+            weight_dtype="fp8_e4m3fn",
+        )
+
+        self.clip = self.clip_loader.load_clip(
+            clip_name="qwen_3_8b_fp8mixed.safetensors",
+            type="flux2",
+            device="default",
+        )
+
+        self.vae = self.vae_loader.load_vae(
+            vae_name="flux2-vae.safetensors"
+        )
+
     def run( self,image_path: str, mask_path: str, prompt: str,):
         """
         image_path : input image
@@ -106,36 +124,17 @@ class FluxKlienMaskedInpaint(object):
                 image=mask_path,
                 channel="red",
             )
-
-            # ------------------------------------------------
-            # Models
-            # ------------------------------------------------
-            unet = self.unet_loader.load_unet(
-                unet_name="flux-2-klein-9b-fp8.safetensors",
-                weight_dtype="fp8_e4m3fn",
-            )
-
-            clip = self.clip_loader.load_clip(
-                clip_name="qwen_3_8b_fp8mixed.safetensors",
-                type="flux2",
-                device="default",
-            )
-
-            vae = self.vae_loader.load_vae(
-                vae_name="flux2-vae.safetensors"
-            )
-
             # ------------------------------------------------
             # Prompts
             # ------------------------------------------------
             positive = self.text_encode.encode(
                 text=prompt,
-                clip=get_value_at_index(clip, 0),
+                clip=get_value_at_index(self.clip, 0),
             )
 
             negative = self.text_encode.encode(
                 text="",
-                clip=get_value_at_index(clip, 0),
+                clip=get_value_at_index(self.clip, 0),
             )
 
             # ------------------------------------------------
@@ -167,6 +166,7 @@ class FluxKlienMaskedInpaint(object):
                 output_padding="32",
                 image=get_value_at_index(image, 0),
                 mask=get_value_at_index(mask, 0),
+                device_mode ="gpu (much faster)"
             )
 
             # ------------------------------------------------
@@ -174,7 +174,7 @@ class FluxKlienMaskedInpaint(object):
             # ------------------------------------------------
             latent = NODE_CLASS_MAPPINGS["VAEEncode"]().encode(
                 pixels=get_value_at_index(crop, 1),
-                vae=get_value_at_index(vae, 0),
+                vae=get_value_at_index(self.vae, 0),
             )
 
             pos_ref = self.reference_latent.EXECUTE_NORMALIZED(
@@ -191,7 +191,7 @@ class FluxKlienMaskedInpaint(object):
                 noise_mask=True,
                 positive=get_value_at_index(pos_ref, 0),
                 negative=get_value_at_index(neg_ref, 0),
-                vae=get_value_at_index(vae, 0),
+                vae=get_value_at_index(self.vae, 0),
                 pixels=get_value_at_index(crop, 1),
                 mask=get_value_at_index(crop, 2),
             )
@@ -205,7 +205,7 @@ class FluxKlienMaskedInpaint(object):
 
             guider = self.cfg().EXECUTE_NORMALIZED(
                 cfg=1,
-                model=get_value_at_index(unet, 0),
+                model=get_value_at_index(self.unet, 0),
                 positive=get_value_at_index(conditioning, 0),
                 negative=get_value_at_index(conditioning, 1),
             )
@@ -230,7 +230,7 @@ class FluxKlienMaskedInpaint(object):
 
             decoded = self.vae_decode.decode(
                 samples=get_value_at_index(samples, 0),
-                vae=get_value_at_index(vae, 0),
+                vae=get_value_at_index(self.vae, 0),
             )
 
             final = self.stitch.inpaint_stitch(
