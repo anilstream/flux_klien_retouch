@@ -42,4 +42,4 @@ WORKDIR /app
 COPY . .
 
 # run fastapi app
-CMD python3 retouch_api.py
+CMD python3 klien_api.py
