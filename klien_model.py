@@ -210,14 +210,20 @@ class FluxKlienMaskedInpaint(object):
                 negative=get_value_at_index(conditioning, 1),
             )
 
-            size = self.get_size.EXECUTE_NORMALIZED(
-                image=get_value_at_index(crop, 1)
-            )
+            # size = self.get_size.EXECUTE_NORMALIZED(
+            #     image=get_value_at_index(crop, 1)
+            # )
+
+            # get image size fix
+            pixels = get_value_at_index(crop, 1)
+
+            # pixels = torch tensor [B, H, W, C]
+            _, height, width, _ = pixels.shape
 
             sigmas = self.scheduler.EXECUTE_NORMALIZED(
                 steps=4,
-                width=get_value_at_index(size, 0),
-                height=get_value_at_index(size, 1),
+                width=get_value_at_index(width, 0),
+                height=get_value_at_index(height, 1),
             )
 
             samples = self.sampler.EXECUTE_NORMALIZED(
