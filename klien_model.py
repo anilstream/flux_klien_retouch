@@ -100,6 +100,7 @@ class FluxKlienMaskedInpaint(object):
         self.vae = self.vae_loader.load_vae(
             vae_name="flux2-vae.safetensors"
         )
+        print("loaded all models...")
 
     def run( self,image_path: str, mask_path: str, prompt: str,):
         """
@@ -222,8 +223,8 @@ class FluxKlienMaskedInpaint(object):
 
             sigmas = self.scheduler.EXECUTE_NORMALIZED(
                 steps=4,
-                width=get_value_at_index(width, 0),
-                height=get_value_at_index(height, 1),
+                width=width,
+                height=height,
             )
 
             samples = self.sampler.EXECUTE_NORMALIZED(
