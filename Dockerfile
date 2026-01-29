@@ -42,4 +42,4 @@ WORKDIR /app
 COPY . .
 
 # run fastapi app
-CMD ["uvicorn", "klien_api:app", "--host", "0.0.0.0", "--port", "5007", "--workers", "1"]
+CMD ["python3", "-u", "klien_api.py"]
