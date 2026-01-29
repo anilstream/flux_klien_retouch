@@ -214,7 +214,7 @@ class FluxKlienMaskedInpaint(object):
             noise_seed=36409988569184
         )
 
-        guider = cfg().EXECUTE_NORMALIZED(
+        guider = cfg.EXECUTE_NORMALIZED(
             cfg=1,
             model=get_value_at_index(self.unet, 0),
             positive=get_value_at_index(conditioning, 0),
