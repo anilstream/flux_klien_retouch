@@ -36,6 +36,8 @@ RUN hf download black-forest-labs/FLUX.2-klein-9b-fp8 flux-2-klein-9b-fp8.safete
 
 WORKDIR /app/ComfyUI/custom_nodes
 RUN git clone https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch
+RUN git clone https://github.com/kijai/ComfyUI-KJNodes
+RUN pip install -r ComfyUI-KJNodes/requirements.txt
 
 # copy source files
 WORKDIR /app

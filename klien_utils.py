@@ -294,3 +294,29 @@ def get_rgba_image(image_bytes: bytes, mask_bytes: bytes) -> bytes:
     output = BytesIO()
     rgba_image.save(output, format="PNG")
     return output.getvalue()
+
+def get_outpaint_padding(img: str, target_size: tuple[int, int]):
+    image = Image.open(img) if isinstance(img, str) else Image.open(BytesIO(img))
+    resized = ImageOps.contain(image, target_size)
+
+    W1, H1 = target_size
+    W2, H2 = resized.size
+
+    pad_x = W1 - W2
+    pad_y = H1 - H2
+
+    return {
+        "resized": resized,
+        "left": pad_x // 2,
+        "right": pad_x - pad_x // 2,
+        "top": pad_y // 2,
+        "bottom": pad_y - pad_y // 2,
+    }
+
+def resize_image(img: bytes, target_size: tuple[int, int]):
+    image = Image.open(BytesIO(img))
+    resized = image.resize(target_size)
+    with BytesIO() as byte_stream:
+        resized.save(byte_stream, format='PNG')
+        image_bytes = byte_stream.getvalue()
+    return image_bytes

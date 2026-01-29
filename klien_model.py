@@ -1,5 +1,6 @@
 # Standard library
 import os
+import random
 
 # Third-party
 import torch
@@ -12,8 +13,6 @@ from klien_utils import (
     import_custom_nodes,
     output_to_bytes,
 )
-
-from PIL import Image
 
 # ---- ComfyUI bootstrap ----
 add_comfyui_directory_to_sys_path()
@@ -193,9 +192,6 @@ class FluxKlienMaskedInpaint(object):
                 negative=get_value_at_index(conditioning, 1),
             )
 
-            # size = self.get_size.EXECUTE_NORMALIZED(
-            #     image=get_value_at_index(crop, 1)
-            # )
 
             # get image size fix
             pixels = get_value_at_index(crop, 1)
@@ -235,6 +231,202 @@ class FluxKlienMaskedInpaint(object):
             )
 
         return image_bytes
+
+class FluxKlienGenFill(object):
+    """
+    Flux GenFill / Outpainting
+    Args supported:
+        top, bottom, left, right
+    """
+
+    def __init__(self):
+
+        with torch.inference_mode():
+
+            # -----------------------------
+            # Loaders (safe to cache)
+            # -----------------------------
+            self.load_image = NODE_CLASS_MAPPINGS["LoadImage"]
+            self.pad_outpaint = NODE_CLASS_MAPPINGS["ImagePadForOutpaint"]
+            self.resize = NODE_CLASS_MAPPINGS["ImageResizeKJv2"]
+
+            self.text_encode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]
+            self.sampler_select = NODE_CLASS_MAPPINGS["KSamplerSelect"]
+
+            self.unet_loader = NODE_CLASS_MAPPINGS["UNETLoader"]
+            self.clip_loader = NODE_CLASS_MAPPINGS["CLIPLoader"]
+            self.vae_loader = NODE_CLASS_MAPPINGS["VAELoader"]
+
+            self.image_composite = NODE_CLASS_MAPPINGS["ImageCompositeMasked"]
+
+            # -----------------------------
+            # Models (load once)
+            # -----------------------------
+            self.unet = self.unet_loader().load_unet(
+                unet_name="flux-2-klein-9b-fp8.safetensors",
+                weight_dtype="fp8_e4m3fn",
+            )
+
+            self.clip = self.clip_loader().load_clip(
+                clip_name="qwen_3_8b_fp8mixed.safetensors",
+                type="flux2",
+                device="default",
+            )
+
+            self.vae = self.vae_loader().load_vae(
+                vae_name="flux2-vae.safetensors"
+            )
+
+            self.outpaint_prompt = "去除图像边缘的深灰色区域，并参考非灰色区域中的元素来扩展和混合图像"
+
+            print("✅ GenFill models loaded", flush=True)
+
+    def run(self, image_path: str, top: int = 0, bottom: int = 0, left: int = 0, right: int = 0):
+
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(image_path)
+
+        with torch.inference_mode():
+
+            # -----------------------------
+            # Runtime-only nodes
+            # -----------------------------
+            random_noise = NODE_CLASS_MAPPINGS["RandomNoise"]()
+            reference_latent = NODE_CLASS_MAPPINGS["ReferenceLatent"]()
+            inpaint_condition = NODE_CLASS_MAPPINGS["InpaintModelConditioning"]()
+
+            cfg = NODE_CLASS_MAPPINGS["CFGGuider"]()
+            scheduler = NODE_CLASS_MAPPINGS["Flux2Scheduler"]()
+            sampler = NODE_CLASS_MAPPINGS["SamplerCustomAdvanced"]()
+            vae_decode = NODE_CLASS_MAPPINGS["VAEDecode"]()
+
+            # -----------------------------
+            # Load image
+            # -----------------------------
+            image = self.load_image().load_image(image=image_path)
+
+            # -----------------------------
+            # Pad (genfill geometry)
+            # -----------------------------
+            padded = self.pad_outpaint().expand_image(
+                left=left,
+                right=right,
+                top=top,
+                bottom=bottom,
+                feathering=200,
+                image=get_value_at_index(image, 0),
+            )
+
+            # -----------------------------
+            # Resize
+            # -----------------------------
+            resized = self.resize().resize(
+                width=1024,
+                height=1024,
+                upscale_method="lanczos",
+                keep_proportion="resize",
+                pad_color="0,0,0",
+                crop_position="center",
+                divisible_by=8,
+                device="cpu",
+                image=get_value_at_index(padded, 0),
+                mask=get_value_at_index(padded, 1),
+            )
+
+            # -----------------------------
+            # Prompt
+            # -----------------------------
+            positive = self.text_encode().encode(
+                text=self.outpaint_prompt,
+                clip=get_value_at_index(self.clip, 0),
+            )
+
+            negative = self.text_encode().encode(
+                text="",
+                clip=get_value_at_index(self.clip, 0),
+            )
+
+            # -----------------------------
+            # Latents
+            # -----------------------------
+            latent = NODE_CLASS_MAPPINGS["VAEEncode"]().encode(
+                pixels=get_value_at_index(resized, 0),
+                vae=get_value_at_index(self.vae, 0),
+            )
+
+            pos_ref = reference_latent.EXECUTE_NORMALIZED(
+                conditioning=get_value_at_index(positive, 0),
+                latent=get_value_at_index(latent, 0),
+            )
+
+            neg_ref = reference_latent.EXECUTE_NORMALIZED(
+                conditioning=get_value_at_index(negative, 0),
+                latent=get_value_at_index(latent, 0),
+            )
+
+            conditioning = inpaint_condition.encode(
+                noise_mask=False,
+                positive=get_value_at_index(pos_ref, 0),
+                negative=get_value_at_index(neg_ref, 0),
+                vae=get_value_at_index(self.vae, 0),
+                pixels=get_value_at_index(resized, 0),
+                mask=get_value_at_index(resized, 3),
+            )
+
+            # -----------------------------
+            # Sampling
+            # -----------------------------
+            noise = random_noise.EXECUTE_NORMALIZED(
+                noise_seed=random.randint(0, 2**63 - 1)
+            )
+
+            guider = cfg.EXECUTE_NORMALIZED(
+                cfg=1,
+                model=get_value_at_index(self.unet, 0),
+                positive=get_value_at_index(conditioning, 0),
+                negative=get_value_at_index(conditioning, 1),
+            )
+
+            pixels = get_value_at_index(resized, 0)
+            _, height, width, _ = pixels.shape
+
+            sigmas = scheduler.EXECUTE_NORMALIZED(
+                steps=5,
+                width=width,
+                height=height,
+            )
+
+            sampler_obj = self.sampler_select().EXECUTE_NORMALIZED(
+                sampler_name="euler"
+            )
+
+            samples = sampler.EXECUTE_NORMALIZED(
+                noise=get_value_at_index(noise, 0),
+                guider=get_value_at_index(guider, 0),
+                sampler=get_value_at_index(sampler_obj, 0),
+                sigmas=get_value_at_index(sigmas, 0),
+                latent_image=get_value_at_index(conditioning, 2),
+            )
+
+            decoded = vae_decode.decode(
+                samples=get_value_at_index(samples, 0),
+                vae=get_value_at_index(self.vae, 0),
+            )
+
+            # -----------------------------
+            # Composite back
+            # -----------------------------
+            final = self.image_composite().EXECUTE_NORMALIZED(
+                x=0, y=0,
+                resize_source=True,
+                destination=get_value_at_index(padded, 0),
+                source=get_value_at_index(decoded, 0),
+                mask=get_value_at_index(padded, 1),
+            )
+
+            return output_to_bytes(
+                get_value_at_index(final, 0)
+            )
 
 if __name__ == "__main__":
     image = os.path.abspath("test/image.png")
