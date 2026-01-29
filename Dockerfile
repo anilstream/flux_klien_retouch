@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 
 # install dependencies
 RUN git clone https://github.com/comfyanonymous/ComfyUI
-RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+RUN pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 RUN pip3 install -r ComfyUI/requirements.txt
 RUN pip3 install fastapi[standard]
 
