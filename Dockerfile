@@ -31,7 +31,6 @@ RUN hf auth login --token $HF_TOKEN
 
 WORKDIR /app/ComfyUI/custom_nodes
 RUN git clone https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch
-RUN pip install -r ComfyUI-Inpaint-CropAndStitch/requirements.txt
 
 
 # download models
