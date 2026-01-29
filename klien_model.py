@@ -62,31 +62,24 @@ class FluxKlienMaskedInpaint(object):
     """
 
     def __init__(self):
+
+        # ------------------------------------------------
+        # Safe loader / utility nodes (OK to cache)
+        # ------------------------------------------------
         self.load_image = NODE_CLASS_MAPPINGS["LoadImage"]()
         self.load_mask = NODE_CLASS_MAPPINGS["LoadImageMask"]()
 
         self.inpaint_crop = NODE_CLASS_MAPPINGS["InpaintCropImproved"]()
+
         self.unet_loader = NODE_CLASS_MAPPINGS["UNETLoader"]()
         self.clip_loader = NODE_CLASS_MAPPINGS["CLIPLoader"]()
         self.vae_loader = NODE_CLASS_MAPPINGS["VAELoader"]()
 
         self.text_encode = NODE_CLASS_MAPPINGS["CLIPTextEncode"]()
-        self.random_noise = NODE_CLASS_MAPPINGS["RandomNoise"]()
-        self.reference_latent = NODE_CLASS_MAPPINGS["ReferenceLatent"]()
-        self.inpaint_condition = NODE_CLASS_MAPPINGS["InpaintModelConditioning"]()
         self.sampler_select = NODE_CLASS_MAPPINGS["KSamplerSelect"]()
 
-
-        self.cfg = NODE_CLASS_MAPPINGS["CFGGuider"]
-        self.scheduler = NODE_CLASS_MAPPINGS["Flux2Scheduler"]()
-        self.sampler = NODE_CLASS_MAPPINGS["SamplerCustomAdvanced"]()
-        self.vae_decode = NODE_CLASS_MAPPINGS["VAEDecode"]()
-
-        self.get_size = NODE_CLASS_MAPPINGS["GetImageSize"]()
-        self.stitch = NODE_CLASS_MAPPINGS["InpaintStitchImproved"]()
-
         # ------------------------------------------------
-        # Models
+        # Models (should be loaded once)
         # ------------------------------------------------
         self.unet = self.unet_loader.load_unet(
             unet_name="flux-2-klein-9b-fp8.safetensors",
@@ -102,6 +95,7 @@ class FluxKlienMaskedInpaint(object):
         self.vae = self.vae_loader.load_vae(
             vae_name="flux2-vae.safetensors"
         )
+
         print("loaded all models...")
 
     def run( self,image_path: str, mask_path: str, prompt: str,):
@@ -115,6 +109,20 @@ class FluxKlienMaskedInpaint(object):
 
         if not os.path.exists(mask_path):
             raise FileNotFoundError(mask_path)
+
+        # ------------------------------------------------
+        # Runtime-only nodes (MUST be created per run)
+        # ------------------------------------------------
+        random_noise = NODE_CLASS_MAPPINGS["RandomNoise"]()
+        reference_latent = NODE_CLASS_MAPPINGS["ReferenceLatent"]()
+        inpaint_condition = NODE_CLASS_MAPPINGS["InpaintModelConditioning"]()
+
+        cfg = NODE_CLASS_MAPPINGS["CFGGuider"]()
+        scheduler = NODE_CLASS_MAPPINGS["Flux2Scheduler"]()
+        sampler = NODE_CLASS_MAPPINGS["SamplerCustomAdvanced"]()
+
+        vae_decode = NODE_CLASS_MAPPINGS["VAEDecode"]()
+        stitch = NODE_CLASS_MAPPINGS["InpaintStitchImproved"]()
 
         #with torch.inference_mode():
 
@@ -180,17 +188,17 @@ class FluxKlienMaskedInpaint(object):
             vae=get_value_at_index(self.vae, 0),
         )
 
-        pos_ref = self.reference_latent.EXECUTE_NORMALIZED(
+        pos_ref = reference_latent.EXECUTE_NORMALIZED(
             conditioning=get_value_at_index(positive, 0),
             latent=get_value_at_index(latent, 0),
         )
 
-        neg_ref = self.reference_latent.EXECUTE_NORMALIZED(
+        neg_ref = reference_latent.EXECUTE_NORMALIZED(
             conditioning=get_value_at_index(negative, 0),
             latent=get_value_at_index(latent, 0),
         )
 
-        conditioning = self.inpaint_condition.encode(
+        conditioning = inpaint_condition.encode(
             noise_mask=True,
             positive=get_value_at_index(pos_ref, 0),
             negative=get_value_at_index(neg_ref, 0),
@@ -202,11 +210,11 @@ class FluxKlienMaskedInpaint(object):
         # ------------------------------------------------
         # Sampling
         # ------------------------------------------------
-        noise = self.random_noise.EXECUTE_NORMALIZED(
+        noise = random_noise.EXECUTE_NORMALIZED(
             noise_seed=36409988569184
         )
 
-        guider = self.cfg().EXECUTE_NORMALIZED(
+        guider = cfg().EXECUTE_NORMALIZED(
             cfg=1,
             model=get_value_at_index(self.unet, 0),
             positive=get_value_at_index(conditioning, 0),
@@ -223,29 +231,29 @@ class FluxKlienMaskedInpaint(object):
         # pixels = torch tensor [B, H, W, C]
         _, height, width, _ = pixels.shape
 
-        sigmas = self.scheduler.EXECUTE_NORMALIZED(
+        sigmas = scheduler.EXECUTE_NORMALIZED(
             steps=4,
             width=width,
             height=height,
         )
 
-        sampler = self.sampler_select.EXECUTE_NORMALIZED(
+        sample = self.sampler_select.EXECUTE_NORMALIZED(
             sampler_name="euler"
         )
-        samples = self.sampler.EXECUTE_NORMALIZED(
+        samples = sampler.EXECUTE_NORMALIZED(
             noise=get_value_at_index(noise, 0),
             guider=get_value_at_index(guider, 0),
-            sampler=get_value_at_index(sampler, 0),
+            sampler=get_value_at_index(sample, 0),
             sigmas=get_value_at_index(sigmas, 0),
             latent_image=get_value_at_index(conditioning, 2),
         )
 
-        decoded = self.vae_decode.decode(
+        decoded = vae_decode.decode(
             samples=get_value_at_index(samples, 0),
             vae=get_value_at_index(self.vae, 0),
         )
 
-        final = self.stitch.inpaint_stitch(
+        final = stitch.inpaint_stitch(
             stitcher=get_value_at_index(crop, 0),
             inpainted_image=get_value_at_index(decoded, 0),
         )
