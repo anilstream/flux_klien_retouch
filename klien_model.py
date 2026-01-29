@@ -114,140 +114,140 @@ class FluxKlienMaskedInpaint(object):
         if not os.path.exists(mask_path):
             raise FileNotFoundError(mask_path)
 
-        with torch.inference_mode():
+        #with torch.inference_mode():
 
-            # ------------------------------------------------
-            # Load image + mask
-            # ------------------------------------------------
-            image = self.load_image.load_image(image=image_path)
+        # ------------------------------------------------
+        # Load image + mask
+        # ------------------------------------------------
+        image = self.load_image.load_image(image=image_path)
 
-            mask = self.load_mask.load_image(
-                image=mask_path,
-                channel="red",
-            )
-            # ------------------------------------------------
-            # Prompts
-            # ------------------------------------------------
-            positive = self.text_encode.encode(
-                text=prompt,
-                clip=get_value_at_index(self.clip, 0),
-            )
+        mask = self.load_mask.load_image(
+            image=mask_path,
+            channel="red",
+        )
+        # ------------------------------------------------
+        # Prompts
+        # ------------------------------------------------
+        positive = self.text_encode.encode(
+            text=prompt,
+            clip=get_value_at_index(self.clip, 0),
+        )
 
-            negative = self.text_encode.encode(
-                text="",
-                clip=get_value_at_index(self.clip, 0),
-            )
+        negative = self.text_encode.encode(
+            text="",
+            clip=get_value_at_index(self.clip, 0),
+        )
 
-            # ------------------------------------------------
-            # Crop + mask processing
-            # ------------------------------------------------
-            crop = self.inpaint_crop.inpaint_crop(
-                downscale_algorithm="bilinear",
-                upscale_algorithm="bicubic",
-                preresize=False,
-                preresize_mode="ensure minimum and maximum resolution",
-                preresize_min_width=1024,
-                preresize_min_height=1024,
-                preresize_max_width=1024,
-                preresize_max_height=1024,
-                mask_fill_holes=False,
-                mask_expand_pixels=0,
-                mask_invert=False,          # set True if mask is inverted
-                mask_blend_pixels=64,
-                mask_hipass_filter=0.1,
-                extend_for_outpainting=False,
-                extend_up_factor=1,
-                extend_down_factor=1,
-                extend_left_factor=1,
-                extend_right_factor=1,
-                context_from_mask_extend_factor=1.2,
-                output_resize_to_target_size=True,
-                output_target_width=1024,
-                output_target_height=1024,
-                output_padding="32",
-                image=get_value_at_index(image, 0),
-                mask=get_value_at_index(mask, 0),
-                device_mode ="gpu (much faster)"
-            )
+        # ------------------------------------------------
+        # Crop + mask processing
+        # ------------------------------------------------
+        crop = self.inpaint_crop.inpaint_crop(
+            downscale_algorithm="bilinear",
+            upscale_algorithm="bicubic",
+            preresize=False,
+            preresize_mode="ensure minimum and maximum resolution",
+            preresize_min_width=1024,
+            preresize_min_height=1024,
+            preresize_max_width=1024,
+            preresize_max_height=1024,
+            mask_fill_holes=False,
+            mask_expand_pixels=0,
+            mask_invert=False,          # set True if mask is inverted
+            mask_blend_pixels=64,
+            mask_hipass_filter=0.1,
+            extend_for_outpainting=False,
+            extend_up_factor=1,
+            extend_down_factor=1,
+            extend_left_factor=1,
+            extend_right_factor=1,
+            context_from_mask_extend_factor=1.2,
+            output_resize_to_target_size=True,
+            output_target_width=1024,
+            output_target_height=1024,
+            output_padding="32",
+            image=get_value_at_index(image, 0),
+            mask=get_value_at_index(mask, 0),
+            device_mode ="gpu (much faster)"
+        )
 
-            # ------------------------------------------------
-            # Latents
-            # ------------------------------------------------
-            latent = NODE_CLASS_MAPPINGS["VAEEncode"]().encode(
-                pixels=get_value_at_index(crop, 1),
-                vae=get_value_at_index(self.vae, 0),
-            )
+        # ------------------------------------------------
+        # Latents
+        # ------------------------------------------------
+        latent = NODE_CLASS_MAPPINGS["VAEEncode"]().encode(
+            pixels=get_value_at_index(crop, 1),
+            vae=get_value_at_index(self.vae, 0),
+        )
 
-            pos_ref = self.reference_latent.EXECUTE_NORMALIZED(
-                conditioning=get_value_at_index(positive, 0),
-                latent=get_value_at_index(latent, 0),
-            )
+        pos_ref = self.reference_latent.EXECUTE_NORMALIZED(
+            conditioning=get_value_at_index(positive, 0),
+            latent=get_value_at_index(latent, 0),
+        )
 
-            neg_ref = self.reference_latent.EXECUTE_NORMALIZED(
-                conditioning=get_value_at_index(negative, 0),
-                latent=get_value_at_index(latent, 0),
-            )
+        neg_ref = self.reference_latent.EXECUTE_NORMALIZED(
+            conditioning=get_value_at_index(negative, 0),
+            latent=get_value_at_index(latent, 0),
+        )
 
-            conditioning = self.inpaint_condition.encode(
-                noise_mask=True,
-                positive=get_value_at_index(pos_ref, 0),
-                negative=get_value_at_index(neg_ref, 0),
-                vae=get_value_at_index(self.vae, 0),
-                pixels=get_value_at_index(crop, 1),
-                mask=get_value_at_index(crop, 2),
-            )
+        conditioning = self.inpaint_condition.encode(
+            noise_mask=True,
+            positive=get_value_at_index(pos_ref, 0),
+            negative=get_value_at_index(neg_ref, 0),
+            vae=get_value_at_index(self.vae, 0),
+            pixels=get_value_at_index(crop, 1),
+            mask=get_value_at_index(crop, 2),
+        )
 
-            # ------------------------------------------------
-            # Sampling
-            # ------------------------------------------------
-            noise = self.random_noise.EXECUTE_NORMALIZED(
-                noise_seed=36409988569184
-            )
+        # ------------------------------------------------
+        # Sampling
+        # ------------------------------------------------
+        noise = self.random_noise.EXECUTE_NORMALIZED(
+            noise_seed=36409988569184
+        )
 
-            guider = self.cfg().EXECUTE_NORMALIZED(
-                cfg=1,
-                model=get_value_at_index(self.unet, 0),
-                positive=get_value_at_index(conditioning, 0),
-                negative=get_value_at_index(conditioning, 1),
-            )
+        guider = self.cfg().EXECUTE_NORMALIZED(
+            cfg=1,
+            model=get_value_at_index(self.unet, 0),
+            positive=get_value_at_index(conditioning, 0),
+            negative=get_value_at_index(conditioning, 1),
+        )
 
-            # size = self.get_size.EXECUTE_NORMALIZED(
-            #     image=get_value_at_index(crop, 1)
-            # )
+        # size = self.get_size.EXECUTE_NORMALIZED(
+        #     image=get_value_at_index(crop, 1)
+        # )
 
-            # get image size fix
-            pixels = get_value_at_index(crop, 1)
+        # get image size fix
+        pixels = get_value_at_index(crop, 1)
 
-            # pixels = torch tensor [B, H, W, C]
-            _, height, width, _ = pixels.shape
+        # pixels = torch tensor [B, H, W, C]
+        _, height, width, _ = pixels.shape
 
-            sigmas = self.scheduler.EXECUTE_NORMALIZED(
-                steps=4,
-                width=width,
-                height=height,
-            )
+        sigmas = self.scheduler.EXECUTE_NORMALIZED(
+            steps=4,
+            width=width,
+            height=height,
+        )
 
-            samples = self.sampler.EXECUTE_NORMALIZED(
-                noise=get_value_at_index(noise, 0),
-                guider=get_value_at_index(guider, 0),
-                sampler="euler",
-                sigmas=get_value_at_index(sigmas, 0),
-                latent_image=get_value_at_index(conditioning, 2),
-            )
+        samples = self.sampler.EXECUTE_NORMALIZED(
+            noise=get_value_at_index(noise, 0),
+            guider=get_value_at_index(guider, 0),
+            sampler="euler",
+            sigmas=get_value_at_index(sigmas, 0),
+            latent_image=get_value_at_index(conditioning, 2),
+        )
 
-            decoded = self.vae_decode.decode(
-                samples=get_value_at_index(samples, 0),
-                vae=get_value_at_index(self.vae, 0),
-            )
+        decoded = self.vae_decode.decode(
+            samples=get_value_at_index(samples, 0),
+            vae=get_value_at_index(self.vae, 0),
+        )
 
-            final = self.stitch.inpaint_stitch(
-                stitcher=get_value_at_index(crop, 0),
-                inpainted_image=get_value_at_index(decoded, 0),
-            )
+        final = self.stitch.inpaint_stitch(
+            stitcher=get_value_at_index(crop, 0),
+            inpainted_image=get_value_at_index(decoded, 0),
+        )
 
-            image_bytes = output_to_bytes(
-                get_value_at_index(final, 0)
-            )
+        image_bytes = output_to_bytes(
+            get_value_at_index(final, 0)
+        )
 
         return image_bytes
 
