@@ -14,8 +14,6 @@ import numpy as np
 import torch
 from PIL import Image,ImageOps
 
-from skimage.morphology import remove_small_objects
-from skimage.measure import label, regionprops
 
 logger = logging.getLogger(__name__)
 
@@ -295,68 +293,4 @@ def get_rgba_image(image_bytes: bytes, mask_bytes: bytes) -> bytes:
     # Convert to PNG bytes
     output = BytesIO()
     rgba_image.save(output, format="PNG")
-    return output.getvalue()
-
-def mask_to_region(
-    mask: bytes,
-    min_size: int = 500
-) -> bytes:
-    """
-    Convert user drawn mask to rectangular region using scikit-image.
-    Removes small noisy pixels <= min_size.
-    """
-
-    # convert binary mask
-    mask = Image.open(BytesIO(mask)).convert("L")
-    mask_np = np.array(mask.convert("L")) > 127
-    h, w = mask_np.shape
-
-    # remove noise
-    cleaned = remove_small_objects(mask_np, min_size=min_size)
-
-    # nothing valid → empty
-    if cleaned.sum() == 0:
-        empty = Image.new("L", mask.size, 0)
-        output = BytesIO()
-        empty.save(output, format="PNG")
-        logger.warning("empty mask found...")
-        return output.getvalue()
-
-    regions = regionprops(label(cleaned))
-
-    minr = min(r.bbox[0] for r in regions)
-    minc = min(r.bbox[1] for r in regions)
-    maxr = max(r.bbox[2] for r in regions)
-    maxc = max(r.bbox[3] for r in regions)
-
-    box_h = maxr - minr
-    box_w = maxc - minc
-
-    side = max(box_h, box_w)
-
-    # square impossible → full image mask
-    if side > min(h, w):
-        full = Image.new("L", (w, h), 255)
-        output = BytesIO()
-        full.save(output, format="PNG")
-        logger.warning("using full mask...")
-        return output.getvalue()
-
-    # square positioning
-    cy = (minr + maxr) // 2
-    cx = (minc + maxc) // 2
-    half = side // 2
-
-    y1 = max(0, min(cy - half, h - side))
-    x1 = max(0, min(cx - half, w - side))
-    y2 = y1 + side
-    x2 = x1 + side
-
-    square = np.zeros((h, w), dtype=np.uint8)
-    square[y1:y2, x1:x2] = 255
-    square = Image.fromarray(square).convert("L")
-
-    # Convert to PNG bytes
-    output = BytesIO()
-    square.save(output, format="PNG")
     return output.getvalue()
