@@ -81,7 +81,7 @@ async def retouch_preset_predict_post(request: Request, image: UploadFile = File
         return {"code": -1, "status": f"prediction failed - {str(e)}"}
 
 @app.post("/retouch/klien/outpaint/generate")
-async def genfill_preset_predict_post(request: Request, image: UploadFile = File(...), image_url: HttpUrl = Form(None),
+async def genfill_preset_predict_post(request: Request, image: UploadFile = File(None), image_url: HttpUrl = Form(None),
                                       height: int = Form(None), width: int = Form(None),
                                       top: int = Form(0), bottom: int = Form(0), left: int = Form(0), right: int = Form(0)):
     try:
