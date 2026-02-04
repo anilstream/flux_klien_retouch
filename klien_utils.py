@@ -320,3 +320,12 @@ def resize_image(img: bytes, target_size: tuple[int, int]):
         resized.save(byte_stream, format='PNG')
         image_bytes = byte_stream.getvalue()
     return image_bytes
+
+def get_white_mask(image):
+    image = Image.open(BytesIO(image)) if isinstance(image, bytes) else image
+    white_mask = Image.new("L", image.size, 255)
+
+    # Convert to PNG bytes
+    output = BytesIO()
+    white_mask.save(output, format="PNG")
+    return output.getvalue()

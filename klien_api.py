@@ -16,7 +16,7 @@ import uvicorn
 
 # Local application
 from klien_model import FluxKlienMaskedInpaint, FluxKlienGenFill
-from klien_utils import fetch_image_data, get_outpaint_padding, resize_image
+from klien_utils import fetch_image_data, get_outpaint_padding, resize_image, get_white_mask
 
 
 masked_inpainter = FluxKlienMaskedInpaint()
@@ -58,6 +58,37 @@ async def retouch_preset_predict_post(request: Request, image: UploadFile = File
 
         image = fetch_image_data(image_url) if image_url  else await image.read()
         mask =  fetch_image_data(mask_url) if mask_url else await mask.read()
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as temp_image, \
+                tempfile.NamedTemporaryFile(suffix=".png", delete=True) as temp_mask:
+
+            temp_image.write(image)
+            temp_image.flush()
+
+            temp_mask.write(mask)
+            temp_mask.flush()
+
+            output = masked_inpainter.run(temp_image.name, temp_mask.name, prompt)
+
+        t2 = time.perf_counter() - t1
+        logger.info(f"time taken: {t2}")
+
+        return Response(content=output, media_type="image/jpg",
+                        headers={'Content-Disposition': f'attachment; filename=processed.jpg'})
+
+    except Exception as e:
+        logger.exception(str(e), exc_info=True)
+        return {"code": -1, "status": f"prediction failed - {str(e)}"}
+
+@app.post("/retouch/klien/edit/generate")
+async def retouch_preset_predict_post(request: Request, image: UploadFile = File(...),
+                                      image_url: HttpUrl = Form(None), prompt: str = Form(...)):
+    try:
+        t1 = time.perf_counter()
+        logger.info(f"prompt: {prompt}")
+
+        image = fetch_image_data(image_url) if image_url  else await image.read()
+        mask = get_white_mask(image)
 
         with tempfile.NamedTemporaryFile(suffix=".png", delete=True) as temp_image, \
                 tempfile.NamedTemporaryFile(suffix=".png", delete=True) as temp_mask:
