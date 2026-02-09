@@ -49,7 +49,7 @@ def retouch_preset_predict_get(request: Request):
 
 
 @app.post("/retouch/klien/inpaint/generate")
-async def retouch_preset_predict_post(request: Request, image: UploadFile = File(...), mask: UploadFile = File(None),
+async def retouch_preset_predict_post(request: Request, image: UploadFile = File(None), mask: UploadFile = File(None),
                                       image_url: HttpUrl = Form(None), mask_url: HttpUrl = Form(None),
                                       prompt: str = Form(...)):
     try:
@@ -81,7 +81,7 @@ async def retouch_preset_predict_post(request: Request, image: UploadFile = File
         return {"code": -1, "status": f"prediction failed - {str(e)}"}
 
 @app.post("/retouch/klien/edit/generate")
-async def retouch_preset_predict_post(request: Request, image: UploadFile = File(...),
+async def retouch_preset_predict_post(request: Request, image: UploadFile = File(None),
                                       image_url: HttpUrl = Form(None), prompt: str = Form(...)):
     try:
         t1 = time.perf_counter()
