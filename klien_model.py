@@ -83,7 +83,7 @@ class FluxKlienMaskedInpaint(object):
             self.sampler_select = NODE_CLASS_MAPPINGS["KSamplerSelect"]()
 
 
-    def run( self,image_path: str, mask_path: str, prompt: str, mask_invert=False):
+    def run( self,image_path: str, mask_path: str, prompt: str, mask_invert=False, mask_expand = 0):
         """
         image_path : input image
         mask_path  : white = edit, black = keep
@@ -148,7 +148,7 @@ class FluxKlienMaskedInpaint(object):
                 preresize_max_width=1024,
                 preresize_max_height=1024,
                 mask_fill_holes=False,
-                mask_expand_pixels=0,
+                mask_expand_pixels=mask_expand,
                 mask_invert=mask_invert,          # set True if mask is inverted
                 mask_blend_pixels=64,
                 mask_hipass_filter=0.1,
