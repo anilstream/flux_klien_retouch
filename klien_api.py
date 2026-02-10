@@ -51,7 +51,7 @@ def retouch_preset_predict_get(request: Request):
 @app.post("/retouch/klien/inpaint/generate")
 async def retouch_preset_predict_post(request: Request, image: UploadFile = File(None), mask: UploadFile = File(None),
                                       image_url: HttpUrl = Form(None), mask_url: HttpUrl = Form(None),
-                                      prompt: str = Form(...)):
+                                      prompt: str = Form(...), invert: bool = Form(False)):
     try:
         t1 = time.perf_counter()
         logger.info(f"prompt: {prompt}")
@@ -68,7 +68,7 @@ async def retouch_preset_predict_post(request: Request, image: UploadFile = File
             temp_mask.write(mask)
             temp_mask.flush()
 
-            output = masked_inpainter.run(temp_image.name, temp_mask.name, prompt)
+            output = masked_inpainter.run(temp_image.name, temp_mask.name, prompt, mask_invert=invert)
 
         t2 = time.perf_counter() - t1
         logger.info(f"time taken: {t2}")
