@@ -51,7 +51,7 @@ def retouch_preset_predict_get(request: Request):
 @app.post("/retouch/klien/inpaint/generate")
 async def retouch_preset_predict_post(request: Request, image: UploadFile = File(None), mask: UploadFile = File(None),
                                       image_url: HttpUrl = Form(None), mask_url: HttpUrl = Form(None),
-                                      prompt: str = Form(...), invert: bool = Form(False), expand: bool = Form(0),):
+                                      prompt: str = Form(...), invert: bool = Form(False), expand: int = Form(0)):
     try:
         t1 = time.perf_counter()
         logger.info(f"prompt: {prompt}")
